@@ -16,7 +16,6 @@ class ServiceController extends Controller
 
     public function store(Request $request)
     {
-        // Misal hanya admin yang boleh tambah layanan
         if (!Auth::user()->isAdmin()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
@@ -25,9 +24,19 @@ class ServiceController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'price' => 'required|numeric|min:0',
+            'img' => 'nullable|image|mimes:jpg,jpeg,png|max:2048'
         ]);
 
-        $service = Service::create($request->all());
+        $data = $request->only('name', 'description', 'price');
+
+        if ($request->hasFile('img')) {
+            $file = $request->file('img');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $file->move(public_path('uploads/services'), $filename);
+            $data['img'] = $filename;
+        }
+
+        $service = Service::create($data);
 
         return response()->json([
             'message' => 'Service created',
@@ -50,9 +59,19 @@ class ServiceController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'price' => 'sometimes|required|numeric|min:0',
+            'img' => 'nullable|image|mimes:jpg,jpeg,png|max:2048'
         ]);
 
-        $service->update($request->all());
+        $data = $request->only('name', 'description', 'price');
+
+        if ($request->hasFile('img')) {
+            $file = $request->file('img');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $file->move(public_path('uploads/services'), $filename);
+            $data['img'] = $filename;
+        }
+
+        $service->update($data);
 
         return response()->json([
             'message' => 'Service updated',
