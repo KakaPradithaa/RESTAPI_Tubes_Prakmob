@@ -16,13 +16,16 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('vehicle_id')->constrained()->onDelete('cascade');
             $table->foreignId('service_id')->constrained()->onDelete('cascade');
+            
+            // Relasi ini merujuk ke tabel 'schedules'
+            $table->foreignId('schedule_id')->constrained('schedules')->onDelete('cascade');
+
             $table->date('booking_date');
             $table->time('booking_time');
             $table->enum('status', ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled'])->default('pending');
             $table->text('complaint')->nullable();
             $table->timestamps();
         });
-
     }
 
     /**
