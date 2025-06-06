@@ -17,14 +17,16 @@ class AuthController extends Controller
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
             'confirm_password' => 'required|same:password',
-            'phone' => 'required|string|max:20',
+            // Tambahkan aturan 'unique:users' di sini
+            'phone' => 'required|string|max:20|unique:users,phone',
             'address' => 'required|string|max:255',
         ]);
 
         if ($validator->fails()) {
+            // Respons ini akan otomatis muncul jika validasi gagal (termasuk nomor duplikat)
             return response()->json([
                 'success' => false,
-                'message' => 'Ada kesalahan',
+                'message' => 'Ada kesalahan pada data yang diinput.',
                 'data' => $validator->errors()
             ], 422);
         }
@@ -39,9 +41,9 @@ class AuthController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Sukses register',
+            'message' => 'Registrasi berhasil',
             'data' => $success
-        ]);
+        ], 201);
     }
 
     public function login(Request $request)
@@ -55,16 +57,15 @@ class AuthController extends Controller
             $success['email'] = $auth->email;
             $success['role'] = $auth->role;
 
-
             return response()->json([
                 'success' => true,
-                'message' => 'Login sukses',
+                'message' => 'Login berhasil',
                 'data' => $success
             ]);
         } else {
             return response()->json([
                 'success' => false,
-                'message' => 'Cek email dan password lagi',
+                'message' => 'Email atau password salah.',
                 'data' => null
             ], 401);
         }
