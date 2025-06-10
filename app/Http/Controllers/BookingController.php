@@ -11,21 +11,35 @@ use Illuminate\Support\Facades\Auth;
 
 class BookingController extends Controller
 {
+    // ... (Metode-metode dari jawaban sebelumnya akan kita letakkan di sini)
+    
     /**
-     * Menampilkan semua booking milik pengguna yang sedang login.
+     * [UNTUK ADMIN] Menampilkan SEMUA booking dari seluruh pengguna.
+     * Dipanggil oleh: GET /api/admin/bookings
      */
     public function index()
     {
-        $bookings = Auth::user()->bookings()->with(['vehicle', 'service', 'schedule'])->get();
+        $bookings = Booking::with(['user', 'vehicle', 'service', 'schedule'])->latest()->get();
         return response()->json($bookings);
     }
 
     /**
-     * Menyimpan booking baru setelah validasi.
+     * [UNTUK USER] Menampilkan booking milik pengguna yang sedang login.
+     * Dipanggil oleh: GET /api/my-bookings
+     */
+    public function myBookings()
+    {
+        $bookings = Auth::user()->bookings()->with(['vehicle', 'service', 'schedule'])->latest()->get();
+        return response()->json($bookings);
+    }
+
+    /**
+     * [UNTUK USER] Menyimpan booking baru setelah validasi.
+     * Dipanggil oleh: POST /api/bookings
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'vehicle_id' => 'required|exists:vehicles,id',
             'service_id' => 'required|exists:services,id',
             'booking_date' => 'required|date|after_or_equal:today',
@@ -33,63 +47,46 @@ class BookingController extends Controller
             'complaint' => 'nullable|string',
         ]);
 
-        // --- Validasi Jadwal ---
-        $dayName = Carbon::parse($request->booking_date)->format('l');
+        $vehicle = Auth::user()->vehicles()->find($validated['vehicle_id']);
+        if (!$vehicle) {
+            return response()->json(['message' => 'Kendaraan ini bukan milik Anda.'], 403);
+        }
+
+        $dayName = Carbon::parse($validated['booking_date'])->format('l');
         $schedule = Schedule::where('day', $dayName)->first();
 
-        if (!$schedule) {
-            return response()->json(['message' => 'Bengkel tutup pada hari yang dipilih.'], 400);
+        if (!$schedule || $validated['booking_time'] < $schedule->open_time || $validated['booking_time'] > $schedule->close_time) {
+            return response()->json(['message' => 'Jadwal booking tidak tersedia.'], 400);
         }
 
-        $bookingTime = $request->booking_time;
-        if ($bookingTime < $schedule->open_time || $bookingTime > $schedule->close_time) {
-            return response()->json([
-                'message' => 'Jam booking di luar jam operasional.',
-                'jam_operasional' => "Buka dari {$schedule->open_time} sampai {$schedule->close_time}"
-            ], 400);
-        }
-
-        // --- Otorisasi Kendaraan ---
-        $vehicle = Vehicle::find($request->vehicle_id);
-        if ($vehicle->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized vehicle'], 403);
-        }
-
-        $booking = Booking::create([
+        $booking = Booking::create(array_merge($validated, [
             'user_id' => Auth::id(),
-            'vehicle_id' => $request->vehicle_id,
-            'service_id' => $request->service_id,
             'schedule_id' => $schedule->id,
-            'booking_date' => $request->booking_date,
-            'booking_time' => Carbon::parse($request->booking_time)->format('H:i:s'),
-            'complaint' => $request->complaint,
             'status' => 'pending',
-        ]);
-
-        $booking->load(['vehicle', 'service', 'schedule']);
+        ]));
 
         return response()->json([
             'message' => 'Booking berhasil dibuat',
-            'booking' => $booking,
+            'booking' => $booking->load(['vehicle', 'service', 'schedule']),
         ], 201);
     }
-
+    
     /**
-     * Menampilkan detail satu booking spesifik.
+     * [UNTUK USER & ADMIN] Menampilkan detail satu booking spesifik.
+     * Dipanggil oleh: GET /api/bookings/{booking}
      */
     public function show(Booking $booking)
     {
-        // Pastikan user hanya bisa melihat booking miliknya sendiri
-        if ($booking->user_id !== Auth::id()) {
+        $user = Auth::user();
+        if ($booking->user_id !== $user->id && !$user->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
-
-        return response()->json($booking->load(['vehicle', 'service', 'schedule']));
+        return response()->json($booking->load(['user', 'vehicle', 'service', 'schedule']));
     }
 
     /**
-     * Memperbarui data booking (contoh: keluhan).
-     * Hanya bisa dilakukan oleh pemilik booking.
+     * [UNTUK USER] Memperbarui data booking (contoh: keluhan).
+     * Dipanggil oleh: PUT /api/bookings/{booking}
      */
     public function update(Request $request, Booking $booking)
     {
@@ -97,12 +94,8 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $request->validate([
-            'complaint' => 'sometimes|nullable|string',
-            // Tambahkan validasi lain jika user boleh mengubah data lain
-        ]);
-
-        $booking->update($request->only(['complaint']));
+        $validated = $request->validate(['complaint' => 'sometimes|nullable|string']);
+        $booking->update($validated);
 
         return response()->json([
             'message' => 'Booking berhasil diperbarui',
@@ -111,40 +104,35 @@ class BookingController extends Controller
     }
 
     /**
-     * Menghapus booking.
-     * Hanya bisa dilakukan oleh pemilik booking.
-     */
-    public function destroy(Booking $booking)
-    {
-        if ($booking->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $booking->delete();
-
-        return response()->json(['message' => 'Booking berhasil dihapus']);
-    }
-
-    /**
-     * Memperbarui status booking.
-     * Hanya bisa diakses oleh Admin.
+     * [UNTUK ADMIN] Memperbarui status booking.
+     * Dipanggil oleh: PATCH /api/admin/bookings/{booking}/status
      */
     public function updateStatus(Request $request, Booking $booking)
     {
-        if (!Auth::user()->isAdmin()) {
-            return response()->json(['message' => 'Hanya admin yang dapat mengakses ini.'], 403);
-        }
-
-        $request->validate([
+        $validated = $request->validate([
             'status' => 'required|in:pending,confirmed,in_progress,completed,cancelled',
         ]);
 
-        $booking->status = $request->status;
-        $booking->save();
+        $booking->update($validated);
 
         return response()->json([
             'message' => 'Status booking berhasil diperbarui',
             'booking' => $booking->load('user', 'vehicle', 'service', 'schedule')
         ]);
+    }
+
+    /**
+     * [UNTUK USER & ADMIN] Menghapus booking.
+     * Dipanggil oleh: DELETE /api/bookings/{booking} ATAU /api/admin/bookings/{booking}
+     */
+    public function destroy(Booking $booking)
+    {
+        $user = Auth::user();
+        if ($booking->user_id !== $user->id && !$user->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $booking->delete();
+        return response()->json(['message' => 'Booking berhasil dihapus']);
     }
 }
