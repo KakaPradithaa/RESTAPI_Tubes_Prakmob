@@ -4,89 +4,91 @@ namespace App\Http\Controllers;
 
 use App\Models\Service;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage; // DIUBAH: Gunakan Storage facade
 
 class ServiceController extends Controller
 {
+    /**
+     * [PUBLIK] Menampilkan semua layanan.
+     */
     public function index()
     {
         $services = Service::all();
         return response()->json($services);
     }
 
+    /**
+     * [ADMIN] Menyimpan service baru.
+     */
     public function store(Request $request)
     {
-        if (!Auth::user()->isAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        $request->validate([
-            'name' => 'required|string|max:255',
+        $validated = $request->validate([
+            'name'        => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
-            'img' => 'nullable|image|mimes:jpg,jpeg,png|max:2048'
+            'price'       => 'required|numeric|min:0',
+            'img'         => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ]);
 
-        $data = $request->only('name', 'description', 'price');
-
         if ($request->hasFile('img')) {
-            $file = $request->file('img');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $file->move(public_path('uploads/services'), $filename);
-            $data['img'] = $filename;
+            // DIUBAH: Menyimpan file menggunakan Storage facade. Lebih aman dan standar.
+            // File akan disimpan di storage/app/public/uploads/services
+            $path = $request->file('img')->store('uploads/services', 'public');
+            $validated['img'] = $path;
         }
 
-        $service = Service::create($data);
+        $service = Service::create($validated);
 
-        return response()->json([
-            'message' => 'Service created',
-            'service' => $service,
-        ], 201);
+        return response()->json($service, 201);
     }
 
+    /**
+     * [ADMIN] Menampilkan detail satu service.
+     */
     public function show(Service $service)
     {
         return response()->json($service);
     }
 
+    /**
+     * [ADMIN] Memperbarui service.
+     */
     public function update(Request $request, Service $service)
     {
-        if (!Auth::user()->isAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        $request->validate([
-            'name' => 'sometimes|required|string|max:255',
+        $validated = $request->validate([
+            'name'        => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'sometimes|required|numeric|min:0',
-            'img' => 'nullable|image|mimes:jpg,jpeg,png|max:2048'
+            'price'       => 'sometimes|required|numeric|min:0',
+            'img'         => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ]);
-
-        $data = $request->only('name', 'description', 'price');
 
         if ($request->hasFile('img')) {
-            $file = $request->file('img');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $file->move(public_path('uploads/services'), $filename);
-            $data['img'] = $filename;
+            // BARU: Hapus gambar lama jika ada gambar baru yang di-upload
+            if ($service->img) {
+                Storage::disk('public')->delete($service->img);
+            }
+
+            // Simpan gambar baru dan dapatkan path-nya
+            $path = $request->file('img')->store('uploads/services', 'public');
+            $validated['img'] = $path;
         }
 
-        $service->update($data);
+        $service->update($validated);
 
-        return response()->json([
-            'message' => 'Service updated',
-            'service' => $service,
-        ]);
+        return response()->json($service);
     }
 
+    /**
+     * [ADMIN] Menghapus service.
+     */
     public function destroy(Service $service)
     {
-        if (!Auth::user()->isAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        // BARU: Hapus file gambar terkait sebelum menghapus record dari database
+        if ($service->img) {
+            Storage::disk('public')->delete($service->img);
         }
 
         $service->delete();
 
-        return response()->json(['message' => 'Service deleted']);
+        return response()->json(['message' => 'Service deleted successfully']);
     }
 }

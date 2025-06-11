@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('schedules', function (Blueprint $table) {
             $table->id();
-            $table->enum('day', ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']);
+            $table->enum('day', ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu']);
             $table->time('open_time');
             $table->time('close_time');
             $table->integer('max_booking_per_slot')->default(3);

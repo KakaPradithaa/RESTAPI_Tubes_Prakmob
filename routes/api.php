@@ -4,6 +4,7 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\UserController; 
 use App\Http\Controllers\VehicleController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,7 @@ Route::post('login', [AuthController::class, 'login']);
 // 2. Rute yang memerlukan login (User & Admin)
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn(Request $request) => $request->user());
+    Route::put('/user', [UserController::class, 'updateProfile']);
 
     // --- Rute untuk User Biasa ---
     Route::get('/my-bookings', [BookingController::class, 'myBookings']);
